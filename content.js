@@ -72,16 +72,16 @@
   }
 
   // The main smooth scrolling loop (runs at 60fps)
-  // Speed range: 1-20, with better scaling for faster speeds
+  // Speed range: 1-20, with much faster base speed
   function smoothScroll(currentTime) {
     if (!scrolling) return;
     const delta = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
 
-    // Improved speed scaling: 
-    // Speed 1 = 30 px/s (very slow), Speed 10 = 190 px/s, Speed 20 = 1400 px/s
-    const baseSpeed = 30;
-    const pixelsPerSecond = baseSpeed * Math.pow(1.22, speed - 1);
+    // Much faster speed scaling:
+    // Speed 1 = 80 px/s, Speed 5 = 175 px/s, Speed 10 = 430 px/s, Speed 20 = 2600 px/s
+    const baseSpeed = 80;
+    const pixelsPerSecond = baseSpeed * Math.pow(1.2, speed - 1);
     window.scrollBy(0, pixelsPerSecond * delta);
 
     // If we're at the bottom, go to next chapter if enabled
@@ -471,10 +471,11 @@
       btn.onclick = () => {
         const d = parseInt(btn.dataset.d);
         speed = Math.max(1, Math.min(20, speed + d));
+        // Update UI immediately
+        ui.querySelector('.ms-spd-val').textContent = speed;
         if (isExtensionValid()) {
           chrome.storage.sync.set({ speed });
         }
-        updateUI();
       };
     });
 
@@ -541,18 +542,18 @@
     } else if (e.key === 'ArrowUp' && e.shiftKey) {
       e.preventDefault();
       speed = Math.min(20, speed + 1);
+      if (ui) ui.querySelector('.ms-spd-val').textContent = speed;
       if (isExtensionValid()) {
         chrome.storage.sync.set({ speed });
       }
-      updateUI();
       showToast('Speed: ' + speed);
     } else if (e.key === 'ArrowDown' && e.shiftKey) {
       e.preventDefault();
       speed = Math.max(1, speed - 1);
+      if (ui) ui.querySelector('.ms-spd-val').textContent = speed;
       if (isExtensionValid()) {
         chrome.storage.sync.set({ speed });
       }
-      updateUI();
       showToast('Speed: ' + speed);
     } else if (e.key.toLowerCase() === 'n' && !e.ctrlKey) {
       e.preventDefault();
