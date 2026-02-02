@@ -72,16 +72,15 @@
   }
 
   // The main smooth scrolling loop (runs at 60fps)
-  // Speed range: 1-20, with much faster base speed
+  // Speed range: 1-20, optimized for noticeable differences between levels
   function smoothScroll(currentTime) {
     if (!scrolling) return;
     const delta = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
 
-    // Much faster speed scaling:
-    // Speed 1 = 80 px/s, Speed 5 = 175 px/s, Speed 10 = 430 px/s, Speed 20 = 2600 px/s
-    const baseSpeed = 80;
-    const pixelsPerSecond = baseSpeed * Math.pow(1.2, speed - 1);
+    // Linear + exponential hybrid for better control at all speeds:
+    // Speed 1 = 150 px/s, Speed 5 = 350 px/s, Speed 10 = 700 px/s, Speed 20 = 2000 px/s
+    const pixelsPerSecond = 100 + (speed * 50) + (Math.pow(speed, 2) * 2);
     window.scrollBy(0, pixelsPerSecond * delta);
 
     // If we're at the bottom, go to next chapter if enabled
