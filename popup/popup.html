@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MScroller</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <header>
+      <h1>MScroller</h1>
+      <button id="toggle" class="btn-primary">▶ Start</button>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="settings">Settings</button>
+      <button class="tab" data-tab="history">History</button>
+    </nav>
+
+    <section id="settings" class="panel active">
+      <div class="setting">
+        <label>Scroll Speed</label>
+        <div class="slider-row">
+          <input type="range" id="speed" min="1" max="20" value="3">
+          <span id="speed-val">3</span>
+        </div>
+      </div>
+
+      <div class="setting">
+        <label>
+          <input type="checkbox" id="autoNext" checked>
+          Auto next chapter
+        </label>
+      </div>
+
+      <div class="setting">
+        <label>Next Chapter Delay</label>
+        <div class="slider-row">
+          <input type="range" id="nextDelay" min="1" max="10" value="3">
+          <span id="nextDelay-val">3s</span>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-label">Session</span>
+          <span class="stat-value" id="session">0:00</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Total</span>
+          <span class="stat-value" id="total">0:00</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Chapters</span>
+          <span class="stat-value" id="chaptersRead">0</span>
+        </div>
+      </div>
+
+      <div class="current">
+        <div class="current-label">Currently Reading</div>
+        <div class="current-title" id="currentTitle">-</div>
+        <div class="current-chapter" id="currentChapter">-</div>
+      </div>
+    </section>
+
+    <section id="history" class="panel">
+      <div id="historyList" class="history-list"></div>
+      <button id="clearHistory" class="btn-secondary">Clear History</button>
+    </section>
+
+    <footer>
+      <span>Space: Start/Stop</span>
+      <span>N/P: Next/Prev</span>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
