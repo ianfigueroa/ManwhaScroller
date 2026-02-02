@@ -7,9 +7,18 @@
   if (window._mscroller) return;
   window._mscroller = true;
 
+  // --- Helper to safely access chrome.storage ---
+  function isExtensionValid() {
+    try {
+      return typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local && chrome.storage.sync;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // --- State variables ---
   let scrolling = false;
-  let speed = 3;
+  let speed = 5;
   let autoNext = true;
   let nextDelay = 3;
   let animationId = null;
@@ -18,21 +27,23 @@
   let ui = null;
 
   // Load user settings from Chrome storage
-  chrome.storage.sync.get({ speed: 3, autoNext: true, nextDelay: 3 }, s => {
-    speed = s.speed;
-    autoNext = s.autoNext;
-    nextDelay = s.nextDelay;
-  });
+  if (isExtensionValid()) {
+    chrome.storage.sync.get({ speed: 5, autoNext: true, nextDelay: 3 }, s => {
+      speed = s.speed;
+      autoNext = s.autoNext;
+      nextDelay = s.nextDelay;
+    });
 
-  // Listen for changes to settings and update state/UI
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'sync') {
-      if (changes.speed) speed = changes.speed.newValue;
-      if (changes.autoNext) autoNext = changes.autoNext.newValue;
-      if (changes.nextDelay) nextDelay = changes.nextDelay.newValue;
-      updateUI();
-    }
-  });
+    // Listen for changes to settings and update state/UI
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'sync') {
+        if (changes.speed) speed = changes.speed.newValue;
+        if (changes.autoNext) autoNext = changes.autoNext.newValue;
+        if (changes.nextDelay) nextDelay = changes.nextDelay.newValue;
+        updateUI();
+      }
+    });
+  }
 
   // --- SCROLLING LOGIC ---
 
@@ -61,13 +72,16 @@
   }
 
   // The main smooth scrolling loop (runs at 60fps)
+  // Speed range: 1-20, with better scaling for faster speeds
   function smoothScroll(currentTime) {
     if (!scrolling) return;
     const delta = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
 
-    // Calculate scroll speed (exponential scaling for better feel)
-    const pixelsPerSecond = 50 * Math.pow(1.15, speed - 1);
+    // Improved speed scaling: 
+    // Speed 1 = 30 px/s (very slow), Speed 10 = 190 px/s, Speed 20 = 1400 px/s
+    const baseSpeed = 30;
+    const pixelsPerSecond = baseSpeed * Math.pow(1.22, speed - 1);
     window.scrollBy(0, pixelsPerSecond * delta);
 
     // If we're at the bottom, go to next chapter if enabled
@@ -133,7 +147,7 @@
     ];
     for (const sel of nextSelectors) {
       const el = document.querySelector(sel);
-      if (el?.href && el.href !== current && !el.href.includes('#')) {
+      if (el && el.href && el.href !== current && !el.href.includes('#')) {
         return el.href;
       }
     }
@@ -173,7 +187,7 @@
     ];
     for (const sel of selectors) {
       const el = document.querySelector(sel);
-      if (el?.href && el.href !== current && !el.href.includes('#')) {
+      if (el && el.href && el.href !== current && !el.href.includes('#')) {
         return el.href;
       }
     }
@@ -190,11 +204,11 @@
       sessionStorage.setItem('mscroller_continue', '1');
       // Countdown timer
       let remaining = nextDelay;
-      showToast(`Next chapter in ${remaining}...`);
+      showToast('Next chapter in ' + remaining + '...');
       const countdownInterval = setInterval(() => {
         remaining--;
         if (remaining > 0) {
-          showToast(`Next chapter in ${remaining}...`);
+          showToast('Next chapter in ' + remaining + '...');
         } else {
           clearInterval(countdownInterval);
           window.location.href = url;
@@ -218,17 +232,24 @@
 
   // Increment the chapters read counter in local storage
   function incrementChaptersRead() {
+    if (!isExtensionValid()) return;
     try {
       chrome.storage.local.get({ chaptersRead: 0 }, data => {
-        chrome.storage.local.set({ chaptersRead: data.chaptersRead + 1 });
+        if (isExtensionValid()) {
+          chrome.storage.local.set({ chaptersRead: data.chaptersRead + 1 });
+        }
       });
-    } catch (e) {}
+    } catch (e) {
+      // Extension context invalidated, ignore
+    }
   }
 
   // --- HISTORY TRACKING ---
 
   // Save the current chapter to reading history
   function saveHistory() {
+    if (!isExtensionValid()) return;
+    
     const entry = {
       title: getTitle(),
       chapter: getChapter() || '?',
@@ -239,6 +260,7 @@
     
     try {
       chrome.storage.local.get({ history: [] }, data => {
+        if (!isExtensionValid()) return;
         let history = data.history;
         // Remove duplicate
         history = history.filter(h => !(h.site === entry.site && h.title === entry.title));
@@ -255,171 +277,187 @@
 
   // --- FLOATING UI ---
 
+  // Escape HTML to prevent XSS and XML parsing issues
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
   // Create the floating UI for controls and stats
   function createUI() {
     if (ui) return;
     
+    // Check if we're in an XML document (some sites serve as XHTML)
+    const isXml = document.contentType && document.contentType.includes('xml');
+    if (isXml) {
+      console.log('MScroller: XML document detected, skipping UI creation');
+      return;
+    }
+    
     ui = document.createElement('div');
     ui.id = 'mscroller-ui';
-    ui.innerHTML = `
-      <div class="ms-header">
-        <span class="ms-brand">MS</span>
-        <span class="ms-close">&times;</span>
-      </div>
-      <div class="ms-content">
-        <div class="ms-title">${getTitle().substring(0, 30)}</div>
-        <div class="ms-chapter">Ch. ${getChapter() || '?'}</div>
-        <div class="ms-controls">
-          <button class="ms-btn ms-play">▶ Start</button>
-        </div>
-        <div class="ms-speed">
-          <button class="ms-spd-btn" data-d="-1">−</button>
-          <span class="ms-spd-val">${speed}</span>
-          <button class="ms-spd-btn" data-d="1">+</button>
-        </div>
-        <div class="ms-nav">
-          <button class="ms-nav-btn ms-prev">← Prev</button>
-          <button class="ms-nav-btn ms-next">Next →</button>
-        </div>
-        <div class="ms-time">0:00</div>
-      </div>
-    `;
+    
+    const titleText = escapeHtml(getTitle().substring(0, 30));
+    const chapterText = escapeHtml(getChapter() || '?');
+    
+    ui.innerHTML = 
+      '<div class="ms-header">' +
+        '<span class="ms-brand">MS</span>' +
+        '<span class="ms-close">x</span>' +
+      '</div>' +
+      '<div class="ms-content">' +
+        '<div class="ms-title">' + titleText + '</div>' +
+        '<div class="ms-chapter">Ch. ' + chapterText + '</div>' +
+        '<div class="ms-controls">' +
+          '<button class="ms-btn ms-play">Start</button>' +
+        '</div>' +
+        '<div class="ms-speed">' +
+          '<button class="ms-spd-btn" data-d="-1">-</button>' +
+          '<span class="ms-spd-val">' + speed + '</span>' +
+          '<button class="ms-spd-btn" data-d="1">+</button>' +
+        '</div>' +
+        '<div class="ms-nav">' +
+          '<button class="ms-nav-btn ms-prev">Prev</button>' +
+          '<button class="ms-nav-btn ms-next">Next</button>' +
+        '</div>' +
+        '<div class="ms-time">0:00</div>' +
+      '</div>';
 
     const style = document.createElement('style');
-    style.textContent = `
-      #mscroller-ui {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        width: 160px;
-        background: #181820;
-        border: 1px solid #2a2a35;
-        border-radius: 12px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        font-size: 12px;
-        color: #d0d0d0;
-        z-index: 999999;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-        overflow: hidden;
-        user-select: none;
-      }
-      #mscroller-ui.hidden { display: none; }
-      .ms-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 8px 12px;
-        background: #1f1f28;
-        cursor: move;
-      }
-      .ms-brand {
-        font-weight: 700;
-        font-size: 14px;
-        color: #4ecdc4;
-      }
-      .ms-close {
-        cursor: pointer;
-        font-size: 18px;
-        color: #666;
-        line-height: 1;
-      }
-      .ms-close:hover { color: #fff; }
-      .ms-content { padding: 12px; }
-      .ms-title {
-        font-size: 11px;
-        color: #999;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        margin-bottom: 2px;
-      }
-      .ms-chapter {
-        font-size: 13px;
-        font-weight: 600;
-        color: #4ecdc4;
-        margin-bottom: 10px;
-      }
-      .ms-controls { margin-bottom: 8px; }
-      .ms-btn {
-        width: 100%;
-        padding: 8px;
-        border: none;
-        border-radius: 6px;
-        background: #252530;
-        color: #d0d0d0;
-        font-size: 12px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background 0.2s;
-      }
-      .ms-btn:hover { background: #32323f; }
-      .ms-btn.active {
-        background: #4ecdc4;
-        color: #181820;
-      }
-      .ms-speed {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-      .ms-spd-btn {
-        width: 28px;
-        height: 28px;
-        border: none;
-        border-radius: 6px;
-        background: #252530;
-        color: #d0d0d0;
-        font-size: 16px;
-        cursor: pointer;
-      }
-      .ms-spd-btn:hover { background: #32323f; }
-      .ms-spd-val {
-        font-size: 14px;
-        font-weight: 600;
-        min-width: 24px;
-        text-align: center;
-        color: #4ecdc4;
-      }
-      .ms-nav {
-        display: flex;
-        gap: 6px;
-        margin-bottom: 8px;
-      }
-      .ms-nav-btn {
-        flex: 1;
-        padding: 6px;
-        border: none;
-        border-radius: 6px;
-        background: #252530;
-        color: #d0d0d0;
-        font-size: 11px;
-        cursor: pointer;
-      }
-      .ms-nav-btn:hover { background: #32323f; }
-      .ms-time {
-        text-align: center;
-        font-size: 11px;
-        color: #555;
-        font-family: monospace;
-      }
-      #mscroller-toast {
-        position: fixed;
-        bottom: 80px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: #181820;
-        color: #d0d0d0;
-        padding: 10px 20px;
-        border-radius: 8px;
-        font-family: -apple-system, sans-serif;
-        font-size: 13px;
-        z-index: 999999;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-        border: 1px solid #2a2a35;
-      }
-    `;
+    style.textContent = 
+      '#mscroller-ui {' +
+        'position: fixed;' +
+        'bottom: 20px;' +
+        'right: 20px;' +
+        'width: 160px;' +
+        'background: #181820;' +
+        'border: 1px solid #2a2a35;' +
+        'border-radius: 12px;' +
+        'font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif;' +
+        'font-size: 12px;' +
+        'color: #d0d0d0;' +
+        'z-index: 999999;' +
+        'box-shadow: 0 8px 32px rgba(0,0,0,0.5);' +
+        'overflow: hidden;' +
+        'user-select: none;' +
+      '}' +
+      '#mscroller-ui.hidden { display: none; }' +
+      '.ms-header {' +
+        'display: flex;' +
+        'justify-content: space-between;' +
+        'align-items: center;' +
+        'padding: 8px 12px;' +
+        'background: #1f1f28;' +
+        'cursor: move;' +
+      '}' +
+      '.ms-brand {' +
+        'font-weight: 700;' +
+        'font-size: 14px;' +
+        'color: #4ecdc4;' +
+      '}' +
+      '.ms-close {' +
+        'cursor: pointer;' +
+        'font-size: 18px;' +
+        'color: #666;' +
+        'line-height: 1;' +
+      '}' +
+      '.ms-close:hover { color: #fff; }' +
+      '.ms-content { padding: 12px; }' +
+      '.ms-title {' +
+        'font-size: 11px;' +
+        'color: #999;' +
+        'white-space: nowrap;' +
+        'overflow: hidden;' +
+        'text-overflow: ellipsis;' +
+        'margin-bottom: 2px;' +
+      '}' +
+      '.ms-chapter {' +
+        'font-size: 13px;' +
+        'font-weight: 600;' +
+        'color: #4ecdc4;' +
+        'margin-bottom: 10px;' +
+      '}' +
+      '.ms-controls { margin-bottom: 8px; }' +
+      '.ms-btn {' +
+        'width: 100%;' +
+        'padding: 8px;' +
+        'border: none;' +
+        'border-radius: 6px;' +
+        'background: #252530;' +
+        'color: #d0d0d0;' +
+        'font-size: 12px;' +
+        'font-weight: 500;' +
+        'cursor: pointer;' +
+        'transition: background 0.2s;' +
+      '}' +
+      '.ms-btn:hover { background: #32323f; }' +
+      '.ms-btn.active {' +
+        'background: #4ecdc4;' +
+        'color: #181820;' +
+      '}' +
+      '.ms-speed {' +
+        'display: flex;' +
+        'align-items: center;' +
+        'justify-content: center;' +
+        'gap: 8px;' +
+        'margin-bottom: 8px;' +
+      '}' +
+      '.ms-spd-btn {' +
+        'width: 28px;' +
+        'height: 28px;' +
+        'border: none;' +
+        'border-radius: 6px;' +
+        'background: #252530;' +
+        'color: #d0d0d0;' +
+        'font-size: 16px;' +
+        'cursor: pointer;' +
+      '}' +
+      '.ms-spd-btn:hover { background: #32323f; }' +
+      '.ms-spd-val {' +
+        'font-size: 14px;' +
+        'font-weight: 600;' +
+        'min-width: 24px;' +
+        'text-align: center;' +
+        'color: #4ecdc4;' +
+      '}' +
+      '.ms-nav {' +
+        'display: flex;' +
+        'gap: 6px;' +
+        'margin-bottom: 8px;' +
+      '}' +
+      '.ms-nav-btn {' +
+        'flex: 1;' +
+        'padding: 6px;' +
+        'border: none;' +
+        'border-radius: 6px;' +
+        'background: #252530;' +
+        'color: #d0d0d0;' +
+        'font-size: 11px;' +
+        'cursor: pointer;' +
+      '}' +
+      '.ms-nav-btn:hover { background: #32323f; }' +
+      '.ms-time {' +
+        'text-align: center;' +
+        'font-size: 11px;' +
+        'color: #555;' +
+        'font-family: monospace;' +
+      '}' +
+      '#mscroller-toast {' +
+        'position: fixed;' +
+        'bottom: 80px;' +
+        'left: 50%;' +
+        'transform: translateX(-50%);' +
+        'background: #181820;' +
+        'color: #d0d0d0;' +
+        'padding: 10px 20px;' +
+        'border-radius: 8px;' +
+        'font-family: -apple-system, sans-serif;' +
+        'font-size: 13px;' +
+        'z-index: 999999;' +
+        'box-shadow: 0 4px 20px rgba(0,0,0,0.5);' +
+        'border: 1px solid #2a2a35;' +
+      '}';
     document.head.appendChild(style);
     document.body.appendChild(ui);
 
@@ -433,7 +471,9 @@
       btn.onclick = () => {
         const d = parseInt(btn.dataset.d);
         speed = Math.max(1, Math.min(20, speed + d));
-        chrome.storage.sync.set({ speed });
+        if (isExtensionValid()) {
+          chrome.storage.sync.set({ speed });
+        }
         updateUI();
       };
     });
@@ -471,7 +511,7 @@
   function updateUI() {
     if (!ui) return;
     const btn = ui.querySelector('.ms-play');
-    btn.textContent = scrolling ? '⏹ Stop' : '▶ Start';
+    btn.textContent = scrolling ? 'Stop' : 'Start';
     btn.classList.toggle('active', scrolling);
     ui.querySelector('.ms-spd-val').textContent = speed;
   }
@@ -491,8 +531,9 @@
 
   // Listen for keyboard shortcuts (space, arrows, n/p/h)
   document.addEventListener('keydown', e => {
-    if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
-    if (document.activeElement?.isContentEditable) return;
+    const activeTag = document.activeElement ? document.activeElement.tagName : '';
+    if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+    if (document.activeElement && document.activeElement.isContentEditable) return;
 
     if (e.key === ' ' && !e.shiftKey && !e.ctrlKey) {
       e.preventDefault();
@@ -500,15 +541,19 @@
     } else if (e.key === 'ArrowUp' && e.shiftKey) {
       e.preventDefault();
       speed = Math.min(20, speed + 1);
-      chrome.storage.sync.set({ speed });
+      if (isExtensionValid()) {
+        chrome.storage.sync.set({ speed });
+      }
       updateUI();
-      showToast(`Speed: ${speed}`);
+      showToast('Speed: ' + speed);
     } else if (e.key === 'ArrowDown' && e.shiftKey) {
       e.preventDefault();
       speed = Math.max(1, speed - 1);
-      chrome.storage.sync.set({ speed });
+      if (isExtensionValid()) {
+        chrome.storage.sync.set({ speed });
+      }
       updateUI();
-      showToast(`Speed: ${speed}`);
+      showToast('Speed: ' + speed);
     } else if (e.key.toLowerCase() === 'n' && !e.ctrlKey) {
       e.preventDefault();
       goNext();
@@ -517,38 +562,40 @@
       goPrev();
     } else if (e.key.toLowerCase() === 'h' && !e.ctrlKey) {
       e.preventDefault();
-      ui?.classList.toggle('hidden');
+      if (ui) ui.classList.toggle('hidden');
     }
   }, true);
 
   // --- EXTENSION MESSAGES ---
 
   // Listen for messages from the popup (toggle, getInfo, updateSpeed, showUI)
-  chrome.runtime.onMessage.addListener((msg, sender, respond) => {
-    if (msg.type === 'toggle') { 
-      toggle(); 
-      respond({ scrolling }); 
-    }
-    else if (msg.type === 'getInfo') { 
-      respond({ 
-        scrolling, 
-        speed,
-        title: getTitle(),
-        chapter: getChapter() || 'Unknown',
-        sessionTime: Math.floor((Date.now() - sessionStart) / 1000)
-      }); 
-    }
-    else if (msg.type === 'updateSpeed') {
-      speed = msg.speed;
-      updateUI();
-      respond({ ok: true });
-    }
-    else if (msg.type === 'showUI') { 
-      if (ui) ui.classList.remove('hidden');
-      respond({ ok: true }); 
-    }
-    return true;
-  });
+  if (isExtensionValid()) {
+    chrome.runtime.onMessage.addListener((msg, sender, respond) => {
+      if (msg.type === 'toggle') { 
+        toggle(); 
+        respond({ scrolling }); 
+      }
+      else if (msg.type === 'getInfo') { 
+        respond({ 
+          scrolling, 
+          speed,
+          title: getTitle(),
+          chapter: getChapter() || 'Unknown',
+          sessionTime: Math.floor((Date.now() - sessionStart) / 1000)
+        }); 
+      }
+      else if (msg.type === 'updateSpeed') {
+        speed = msg.speed;
+        updateUI();
+        respond({ ok: true });
+      }
+      else if (msg.type === 'showUI') { 
+        if (ui) ui.classList.remove('hidden');
+        respond({ ok: true }); 
+      }
+      return true;
+    });
+  }
 
   // --- INITIALIZATION ---
 
@@ -559,11 +606,11 @@
     if (sessionStorage.getItem('mscroller_continue') === '1') {
       sessionStorage.removeItem('mscroller_continue');
       let countdown = 2;
-      showToast(`Continuing in ${countdown}...`);
+      showToast('Continuing in ' + countdown + '...');
       const continueInterval = setInterval(() => {
         countdown--;
         if (countdown > 0) {
-          showToast(`Continuing in ${countdown}...`);
+          showToast('Continuing in ' + countdown + '...');
         } else {
           clearInterval(continueInterval);
           start();
@@ -577,10 +624,13 @@
 
   // When leaving the page, save the session time to local storage
   window.addEventListener('beforeunload', () => {
+    if (!isExtensionValid()) return;
     try {
       const sessionSecs = Math.floor((Date.now() - sessionStart) / 1000);
       chrome.storage.local.get({ totalTime: 0 }, data => {
-        chrome.storage.local.set({ totalTime: data.totalTime + sessionSecs });
+        if (isExtensionValid()) {
+          chrome.storage.local.set({ totalTime: data.totalTime + sessionSecs });
+        }
       });
     } catch (e) {
       // Extension context invalidated, ignore
