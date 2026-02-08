@@ -68,13 +68,13 @@
     scrolling ? stop() : start();
   }
 
-  // Speed 1 = 150 px/s, Speed 5 = 350 px/s, Speed 10 = 700 px/s, Speed 20 = 2000 px/s
+  // Speed 1 ≈ 72 px/s, Speed 25 ≈ 708 px/s, Speed 50 ≈ 1756 px/s
   function smoothScroll(currentTime) {
     if (!scrolling) return;
     const delta = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
 
-    const pixelsPerSecond = 100 + (speed * 50) + (Math.pow(speed, 2) * 2);
+    const pixelsPerSecond = 50 + (speed * 20) + (Math.pow(speed, 1.5) * 2);
     window.scrollBy(0, pixelsPerSecond * delta);
 
     const atBottom = (window.innerHeight + window.scrollY) >= document.body.scrollHeight - 50;
@@ -235,17 +235,12 @@
     ui = document.createElement('div');
     ui.id = 'mscroller-ui';
 
-    const titleText = escapeHtml(getTitle().substring(0, 30));
-    const chapterText = escapeHtml(getChapter() || '?');
-
     ui.innerHTML =
       '<div class="ms-header">' +
         '<span class="ms-brand">MS</span>' +
         '<span class="ms-close">x</span>' +
       '</div>' +
       '<div class="ms-content">' +
-        '<div class="ms-title">' + titleText + '</div>' +
-        '<div class="ms-chapter">Ch. ' + chapterText + '</div>' +
         '<div class="ms-controls">' +
           '<button class="ms-btn ms-play">Start</button>' +
         '</div>' +
@@ -292,8 +287,6 @@
       '.ms-close { cursor: pointer; font-size: 18px; color: #666; line-height: 1; }' +
       '.ms-close:hover { color: #fff; }' +
       '.ms-content { padding: 12px; }' +
-      '.ms-title { font-size: 11px; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }' +
-      '.ms-chapter { font-size: 13px; font-weight: 600; color: #4ecdc4; margin-bottom: 10px; }' +
       '.ms-controls { margin-bottom: 8px; }' +
       '.ms-btn { width: 100%; padding: 8px; border: none; border-radius: 6px; background: #252530; color: #d0d0d0; font-size: 12px; font-weight: 500; cursor: pointer; transition: background 0.2s; }' +
       '.ms-btn:hover { background: #32323f; }' +
@@ -323,7 +316,7 @@
     ui.querySelectorAll('.ms-spd-btn').forEach(btn => {
       btn.onclick = () => {
         const d = parseInt(btn.dataset.d);
-        speed = Math.max(1, Math.min(20, speed + d));
+        speed = Math.max(1, Math.min(50, speed + d));
         ui.querySelector('.ms-spd-val').textContent = speed;
         if (isExtensionValid()) {
           chrome.storage.sync.set({ speed });
@@ -393,7 +386,7 @@
       toggle();
     } else if (e.key === 'ArrowUp' && e.shiftKey) {
       e.preventDefault();
-      speed = Math.min(20, speed + 1);
+      speed = Math.min(50, speed + 1);
       if (ui) ui.querySelector('.ms-spd-val').textContent = speed;
       if (isExtensionValid()) chrome.storage.sync.set({ speed });
       showToast('Speed: ' + speed);
