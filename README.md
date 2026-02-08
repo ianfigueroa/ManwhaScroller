@@ -4,7 +4,7 @@ MScroller is a Chrome extension for auto-scrolling manga, manhwa, and webtoons. 
 
 ## Features
 
-- **Buttery smooth 60fps scrolling** with customizable speed (1-20, exponential scaling)
+- **Buttery smooth 60fps scrolling** with customizable speed (1-50)
 - **Auto-continue** to the next chapter with a countdown timer
 - **Chapter tracker**: counts total chapters read
 - **Session & total time tracking**
@@ -42,7 +42,7 @@ These shortcuts only work after you click Start to activate the extension on a p
 
 ## Settings
 
-- **Speed**: Adjust scroll speed from 1 (slow) to 20 (fast)
+- **Speed**: Adjust scroll speed from 1 (slow) to 50 (fast)
 - **Auto-next**: Enable/disable automatic chapter navigation
 - **Delay**: Set countdown before next chapter loads
 
@@ -62,4 +62,4 @@ All data is stored locally on your device. Nothing is sent to any server. The ex
 
 ## Version
 
-v3.1.0
+v3.2.0
