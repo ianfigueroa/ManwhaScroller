@@ -1,10 +1,9 @@
 {
   "manifest_version": 3,
   "name": "MScroller",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Simple auto-scroller for manga and manhwa websites",
-  "permissions": ["activeTab", "storage"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": ["activeTab", "storage", "scripting"],
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
@@ -22,10 +21,5 @@
   },
   "background": {
     "service_worker": "background.js"
-  },
-  "content_scripts": [{
-    "matches": ["<all_urls>"],
-    "js": ["content.js"],
-    "run_at": "document_idle"
-  }]
+  }
 }

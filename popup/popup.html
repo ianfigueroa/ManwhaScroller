@@ -12,11 +12,6 @@
       <button id="toggle" class="btn-primary">▶ Start</button>
     </header>
 
-    <nav class="tabs">
-      <button class="tab active" data-tab="settings">Settings</button>
-      <button class="tab" data-tab="history">History</button>
-    </nav>
-
     <section id="settings" class="panel active">
       <div class="setting">
         <label>Scroll Speed</label>
@@ -55,21 +50,10 @@
           <span class="stat-value" id="chaptersRead">0</span>
         </div>
       </div>
-
-      <div class="current">
-        <div class="current-label">Currently Reading</div>
-        <div class="current-title" id="currentTitle">-</div>
-        <div class="current-chapter" id="currentChapter">-</div>
-      </div>
-    </section>
-
-    <section id="history" class="panel">
-      <div id="historyList" class="history-list"></div>
-      <button id="clearHistory" class="btn-secondary">Clear History</button>
     </section>
 
     <footer>
-      <span>Space: Start/Stop</span>
+      <span>Space: Start/Stop (when active)</span>
       <span>N/P: Next/Prev</span>
     </footer>
   </div>

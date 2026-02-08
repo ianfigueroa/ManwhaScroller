@@ -8,8 +8,8 @@ MScroller is a Chrome extension for auto-scrolling manga, manhwa, and webtoons. 
 - **Auto-continue** to the next chapter with a countdown timer
 - **Chapter tracker**: counts total chapters read
 - **Session & total time tracking**
-- **Reading history**: view, open, and delete individual chapters
-- **Keyboard shortcuts** for quick control
+- **Click-to-activate**: privacy-friendly, only runs when you click Start
+- **Keyboard shortcuts** for quick control (when active)
 - **Modern teal UI**: floating controls, draggable, and easy to use
 - **Works on most manga/manhwa/webtoon sites** (smart pattern detection, no hardcoded sites)
 
@@ -23,11 +23,13 @@ MScroller is a Chrome extension for auto-scrolling manga, manhwa, and webtoons. 
 ## Usage
 
 1. Visit your favorite manga, manhwa, or webtoon site
-2. Click the extension icon or press `Space` to start/stop scrolling
+2. Click the extension icon and press Start to activate
 3. Adjust scroll speed and settings in the popup
 4. The extension will auto-continue to the next chapter when you reach the end
 
 ## Keyboard Shortcuts
+
+These shortcuts only work after you click Start to activate the extension on a page.
 
 | Key     | Action               |
 | ------- | -------------------- |
@@ -56,8 +58,8 @@ MScroller uses smart pattern detection to work on most manga, manhwa, and webtoo
 
 ## Privacy
 
-All data is stored locally on your device. Nothing is sent to any server.
+All data is stored locally on your device. Nothing is sent to any server. The extension only activates when you explicitly click Start—it never runs automatically in the background.
 
 ## Version
 
-v1.0.0
+v3.1.0

@@ -1,7 +1,7 @@
 /*
  * MScroller - Content Script
- * This is the main logic for the auto-scrolling extension.
- * Handles smooth scrolling, chapter navigation, UI, and stats.
+ * Auto-scrolling extension for manga/manhwa reading.
+ * Only runs when activated via popup - no intrusive behavior.
  */
 (function() {
   if (window._mscroller) return;
@@ -25,6 +25,7 @@
   let lastTime = 0;
   let sessionStart = Date.now();
   let ui = null;
+  let keyboardEnabled = false;
 
   // Load user settings from Chrome storage
   if (isExtensionValid()) {
@@ -34,7 +35,6 @@
       nextDelay = s.nextDelay;
     });
 
-    // Listen for changes to settings and update state/UI
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === 'sync') {
         if (changes.speed) speed = changes.speed.newValue;
@@ -47,7 +47,6 @@
 
   // --- SCROLLING LOGIC ---
 
-  // Start auto-scrolling
   function start() {
     if (scrolling) return;
     scrolling = true;
@@ -56,34 +55,28 @@
     animationId = requestAnimationFrame(smoothScroll);
   }
 
-  // Stop auto-scrolling
   function stop() {
     scrolling = false;
-    if (animationId) { 
-      cancelAnimationFrame(animationId); 
-      animationId = null; 
+    if (animationId) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
     }
     updateUI();
   }
 
-  // Toggle scrolling on/off
   function toggle() {
     scrolling ? stop() : start();
   }
 
-  // The main smooth scrolling loop (runs at 60fps)
-  // Speed range: 1-20, optimized for noticeable differences between levels
+  // Speed 1 = 150 px/s, Speed 5 = 350 px/s, Speed 10 = 700 px/s, Speed 20 = 2000 px/s
   function smoothScroll(currentTime) {
     if (!scrolling) return;
     const delta = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
 
-    // Linear + exponential hybrid for better control at all speeds:
-    // Speed 1 = 150 px/s, Speed 5 = 350 px/s, Speed 10 = 700 px/s, Speed 20 = 2000 px/s
     const pixelsPerSecond = 100 + (speed * 50) + (Math.pow(speed, 2) * 2);
     window.scrollBy(0, pixelsPerSecond * delta);
 
-    // If we're at the bottom, go to next chapter if enabled
     const atBottom = (window.innerHeight + window.scrollY) >= document.body.scrollHeight - 50;
     if (atBottom && autoNext) {
       stop();
@@ -96,7 +89,6 @@
 
   // --- CHAPTER NAVIGATION ---
 
-  // Try to extract the current chapter number from the URL
   function getChapter() {
     const url = window.location.href;
     const patterns = [
@@ -113,7 +105,6 @@
     return null;
   }
 
-  // Try to extract the manga/manhwa title from the page
   function getTitle() {
     const selectors = [
       '.manga-title', '.series-title', '.comic-title',
@@ -124,20 +115,16 @@
       const el = document.querySelector(sel);
       if (el) {
         let text = el.textContent.trim();
-        // Clean up
         text = text.replace(/chapter.*/i, '').replace(/episode.*/i, '').trim();
         if (text.length > 2 && text.length < 150) return text;
       }
     }
-    // Fallback to page title
     return document.title.split(/[-|]/)[0].trim();
   }
 
-  // Find the link to the next chapter (using several strategies)
   function findNextLink() {
     const current = window.location.href;
-    
-    // Strategy 1: Common next button patterns
+
     const nextSelectors = [
       'a[class*="next"]:not([class*="prev"])',
       'a[rel="next"]',
@@ -151,17 +138,15 @@
       }
     }
 
-    // Strategy 2: Text content
     const links = document.querySelectorAll('a[href]');
     for (const a of links) {
       const text = a.textContent.toLowerCase().trim();
-      if ((text === 'next' || text.includes('next chapter') || text === '>' || text === '>>') 
+      if ((text === 'next' || text.includes('next chapter') || text === '>' || text === '>>')
           && a.href !== current && !a.href.includes('#')) {
         return a.href;
       }
     }
 
-    // Strategy 3: Chapter number increment
     const currentCh = parseFloat(getChapter());
     if (currentCh) {
       for (const a of links) {
@@ -178,7 +163,6 @@
     return null;
   }
 
-  // Find the link to the previous chapter
   function findPrevLink() {
     const current = window.location.href;
     const selectors = [
@@ -193,15 +177,11 @@
     return null;
   }
 
-  // Go to the next chapter, with countdown and history update
   function goNext() {
     const url = findNextLink();
     if (url) {
-      saveHistory();
       incrementChaptersRead();
-      // Remember to auto-start on next page
       sessionStorage.setItem('mscroller_continue', '1');
-      // Countdown timer
       let remaining = nextDelay;
       showToast('Next chapter in ' + remaining + '...');
       const countdownInterval = setInterval(() => {
@@ -218,18 +198,15 @@
     }
   }
 
-  // Go to the previous chapter and update history
   function goPrev() {
     const url = findPrevLink();
     if (url) {
-      saveHistory();
       window.location.href = url;
     } else {
       showToast('No previous chapter found');
     }
   }
 
-  // Increment the chapters read counter in local storage
   function incrementChaptersRead() {
     if (!isExtensionValid()) return;
     try {
@@ -238,69 +215,30 @@
           chrome.storage.local.set({ chaptersRead: data.chaptersRead + 1 });
         }
       });
-    } catch (e) {
-      // Extension context invalidated, ignore
-    }
-  }
-
-  // --- HISTORY TRACKING ---
-
-  // Save the current chapter to reading history
-  function saveHistory() {
-    if (!isExtensionValid()) return;
-    
-    const entry = {
-      title: getTitle(),
-      chapter: getChapter() || '?',
-      url: window.location.href,
-      site: window.location.hostname,
-      time: Date.now()
-    };
-    
-    try {
-      chrome.storage.local.get({ history: [] }, data => {
-        if (!isExtensionValid()) return;
-        let history = data.history;
-        // Remove duplicate
-        history = history.filter(h => !(h.site === entry.site && h.title === entry.title));
-        // Add to front
-        history.unshift(entry);
-        // Keep last 100
-        history = history.slice(0, 100);
-        chrome.storage.local.set({ history });
-      });
-    } catch (e) {
-      // Extension context invalidated, ignore
-    }
+    } catch (e) {}
   }
 
   // --- FLOATING UI ---
 
-  // Escape HTML to prevent XSS and XML parsing issues
   function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
   }
 
-  // Create the floating UI for controls and stats
   function createUI() {
     if (ui) return;
-    
-    // Check if we're in an XML document (some sites serve as XHTML)
+
     const isXml = document.contentType && document.contentType.includes('xml');
-    if (isXml) {
-      console.log('MScroller: XML document detected, skipping UI creation');
-      return;
-    }
-    
+    if (isXml) return;
+
     ui = document.createElement('div');
     ui.id = 'mscroller-ui';
-    
+
     const titleText = escapeHtml(getTitle().substring(0, 30));
     const chapterText = escapeHtml(getChapter() || '?');
-    
-    ui.innerHTML = 
+
+    ui.innerHTML =
       '<div class="ms-header">' +
         '<span class="ms-brand">MS</span>' +
         '<span class="ms-close">x</span>' +
@@ -324,7 +262,7 @@
       '</div>';
 
     const style = document.createElement('style');
-    style.textContent = 
+    style.textContent =
       '#mscroller-ui {' +
         'position: fixed;' +
         'bottom: 20px;' +
@@ -350,127 +288,42 @@
         'background: #1f1f28;' +
         'cursor: move;' +
       '}' +
-      '.ms-brand {' +
-        'font-weight: 700;' +
-        'font-size: 14px;' +
-        'color: #4ecdc4;' +
-      '}' +
-      '.ms-close {' +
-        'cursor: pointer;' +
-        'font-size: 18px;' +
-        'color: #666;' +
-        'line-height: 1;' +
-      '}' +
+      '.ms-brand { font-weight: 700; font-size: 14px; color: #4ecdc4; }' +
+      '.ms-close { cursor: pointer; font-size: 18px; color: #666; line-height: 1; }' +
       '.ms-close:hover { color: #fff; }' +
       '.ms-content { padding: 12px; }' +
-      '.ms-title {' +
-        'font-size: 11px;' +
-        'color: #999;' +
-        'white-space: nowrap;' +
-        'overflow: hidden;' +
-        'text-overflow: ellipsis;' +
-        'margin-bottom: 2px;' +
-      '}' +
-      '.ms-chapter {' +
-        'font-size: 13px;' +
-        'font-weight: 600;' +
-        'color: #4ecdc4;' +
-        'margin-bottom: 10px;' +
-      '}' +
+      '.ms-title { font-size: 11px; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }' +
+      '.ms-chapter { font-size: 13px; font-weight: 600; color: #4ecdc4; margin-bottom: 10px; }' +
       '.ms-controls { margin-bottom: 8px; }' +
-      '.ms-btn {' +
-        'width: 100%;' +
-        'padding: 8px;' +
-        'border: none;' +
-        'border-radius: 6px;' +
-        'background: #252530;' +
-        'color: #d0d0d0;' +
-        'font-size: 12px;' +
-        'font-weight: 500;' +
-        'cursor: pointer;' +
-        'transition: background 0.2s;' +
-      '}' +
+      '.ms-btn { width: 100%; padding: 8px; border: none; border-radius: 6px; background: #252530; color: #d0d0d0; font-size: 12px; font-weight: 500; cursor: pointer; transition: background 0.2s; }' +
       '.ms-btn:hover { background: #32323f; }' +
-      '.ms-btn.active {' +
-        'background: #4ecdc4;' +
-        'color: #181820;' +
-      '}' +
-      '.ms-speed {' +
-        'display: flex;' +
-        'align-items: center;' +
-        'justify-content: center;' +
-        'gap: 8px;' +
-        'margin-bottom: 8px;' +
-      '}' +
-      '.ms-spd-btn {' +
-        'width: 28px;' +
-        'height: 28px;' +
-        'border: none;' +
-        'border-radius: 6px;' +
-        'background: #252530;' +
-        'color: #d0d0d0;' +
-        'font-size: 16px;' +
-        'cursor: pointer;' +
-      '}' +
+      '.ms-btn.active { background: #4ecdc4; color: #181820; }' +
+      '.ms-speed { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px; }' +
+      '.ms-spd-btn { width: 28px; height: 28px; border: none; border-radius: 6px; background: #252530; color: #d0d0d0; font-size: 16px; cursor: pointer; }' +
       '.ms-spd-btn:hover { background: #32323f; }' +
-      '.ms-spd-val {' +
-        'font-size: 14px;' +
-        'font-weight: 600;' +
-        'min-width: 24px;' +
-        'text-align: center;' +
-        'color: #4ecdc4;' +
-      '}' +
-      '.ms-nav {' +
-        'display: flex;' +
-        'gap: 6px;' +
-        'margin-bottom: 8px;' +
-      '}' +
-      '.ms-nav-btn {' +
-        'flex: 1;' +
-        'padding: 6px;' +
-        'border: none;' +
-        'border-radius: 6px;' +
-        'background: #252530;' +
-        'color: #d0d0d0;' +
-        'font-size: 11px;' +
-        'cursor: pointer;' +
-      '}' +
+      '.ms-spd-val { font-size: 14px; font-weight: 600; min-width: 24px; text-align: center; color: #4ecdc4; }' +
+      '.ms-nav { display: flex; gap: 6px; margin-bottom: 8px; }' +
+      '.ms-nav-btn { flex: 1; padding: 6px; border: none; border-radius: 6px; background: #252530; color: #d0d0d0; font-size: 11px; cursor: pointer; }' +
       '.ms-nav-btn:hover { background: #32323f; }' +
-      '.ms-time {' +
-        'text-align: center;' +
-        'font-size: 11px;' +
-        'color: #555;' +
-        'font-family: monospace;' +
-      '}' +
-      '#mscroller-toast {' +
-        'position: fixed;' +
-        'bottom: 80px;' +
-        'left: 50%;' +
-        'transform: translateX(-50%);' +
-        'background: #181820;' +
-        'color: #d0d0d0;' +
-        'padding: 10px 20px;' +
-        'border-radius: 8px;' +
-        'font-family: -apple-system, sans-serif;' +
-        'font-size: 13px;' +
-        'z-index: 999999;' +
-        'box-shadow: 0 4px 20px rgba(0,0,0,0.5);' +
-        'border: 1px solid #2a2a35;' +
-      '}';
+      '.ms-time { text-align: center; font-size: 11px; color: #555; font-family: monospace; }' +
+      '#mscroller-toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #181820; color: #d0d0d0; padding: 10px 20px; border-radius: 8px; font-family: -apple-system, sans-serif; font-size: 13px; z-index: 999999; box-shadow: 0 4px 20px rgba(0,0,0,0.5); border: 1px solid #2a2a35; }';
+
     document.head.appendChild(style);
     document.body.appendChild(ui);
 
-    // Events
-    ui.querySelector('.ms-close').onclick = () => ui.classList.add('hidden');
+    // Event handlers
+    ui.querySelector('.ms-close').onclick = () => {
+      ui.classList.add('hidden');
+      disableKeyboardShortcuts();
+    };
     ui.querySelector('.ms-play').onclick = toggle;
     ui.querySelector('.ms-prev').onclick = goPrev;
     ui.querySelector('.ms-next').onclick = goNext;
-    
+
     ui.querySelectorAll('.ms-spd-btn').forEach(btn => {
       btn.onclick = () => {
         const d = parseInt(btn.dataset.d);
         speed = Math.max(1, Math.min(20, speed + d));
-        // Update UI immediately
         ui.querySelector('.ms-spd-val').textContent = speed;
         if (isExtensionValid()) {
           chrome.storage.sync.set({ speed });
@@ -478,7 +331,7 @@
       };
     });
 
-    // Drag
+    // Drag functionality
     let dragging = false, startX, startY, startLeft, startTop;
     ui.querySelector('.ms-header').onmousedown = e => {
       dragging = true;
@@ -497,7 +350,7 @@
     };
     document.onmouseup = () => dragging = false;
 
-    // Timer
+    // Timer update
     setInterval(() => {
       const secs = Math.floor((Date.now() - sessionStart) / 1000);
       const m = Math.floor(secs / 60);
@@ -505,9 +358,11 @@
       const timeEl = ui.querySelector('.ms-time');
       if (timeEl) timeEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
     }, 1000);
+
+    // Enable keyboard shortcuts when UI is created
+    enableKeyboardShortcuts();
   }
 
-  // Update the UI to reflect current state (scrolling, speed)
   function updateUI() {
     if (!ui) return;
     const btn = ui.querySelector('.ms-play');
@@ -516,7 +371,6 @@
     ui.querySelector('.ms-spd-val').textContent = speed;
   }
 
-  // Show a temporary toast message on the screen
   function showToast(msg) {
     let toast = document.getElementById('mscroller-toast');
     if (toast) toast.remove();
@@ -529,8 +383,7 @@
 
   // --- KEYBOARD SHORTCUTS ---
 
-  // Listen for keyboard shortcuts (space, arrows, n/p/h)
-  document.addEventListener('keydown', e => {
+  function handleKeydown(e) {
     const activeTag = document.activeElement ? document.activeElement.tagName : '';
     if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
     if (document.activeElement && document.activeElement.isContentEditable) return;
@@ -542,17 +395,13 @@
       e.preventDefault();
       speed = Math.min(20, speed + 1);
       if (ui) ui.querySelector('.ms-spd-val').textContent = speed;
-      if (isExtensionValid()) {
-        chrome.storage.sync.set({ speed });
-      }
+      if (isExtensionValid()) chrome.storage.sync.set({ speed });
       showToast('Speed: ' + speed);
     } else if (e.key === 'ArrowDown' && e.shiftKey) {
       e.preventDefault();
       speed = Math.max(1, speed - 1);
       if (ui) ui.querySelector('.ms-spd-val').textContent = speed;
-      if (isExtensionValid()) {
-        chrome.storage.sync.set({ speed });
-      }
+      if (isExtensionValid()) chrome.storage.sync.set({ speed });
       showToast('Speed: ' + speed);
     } else if (e.key.toLowerCase() === 'n' && !e.ctrlKey) {
       e.preventDefault();
@@ -564,34 +413,46 @@
       e.preventDefault();
       if (ui) ui.classList.toggle('hidden');
     }
-  }, true);
+  }
+
+  function enableKeyboardShortcuts() {
+    if (keyboardEnabled) return;
+    keyboardEnabled = true;
+    document.addEventListener('keydown', handleKeydown, true);
+  }
+
+  function disableKeyboardShortcuts() {
+    if (!keyboardEnabled) return;
+    keyboardEnabled = false;
+    document.removeEventListener('keydown', handleKeydown, true);
+  }
 
   // --- EXTENSION MESSAGES ---
 
-  // Listen for messages from the popup (toggle, getInfo, updateSpeed, showUI)
   if (isExtensionValid()) {
     chrome.runtime.onMessage.addListener((msg, sender, respond) => {
-      if (msg.type === 'toggle') { 
-        toggle(); 
-        respond({ scrolling }); 
+      if (msg.type === 'toggle') {
+        toggle();
+        respond({ scrolling });
       }
-      else if (msg.type === 'getInfo') { 
-        respond({ 
-          scrolling, 
+      else if (msg.type === 'getInfo') {
+        respond({
+          scrolling,
           speed,
           title: getTitle(),
           chapter: getChapter() || 'Unknown',
           sessionTime: Math.floor((Date.now() - sessionStart) / 1000)
-        }); 
+        });
       }
       else if (msg.type === 'updateSpeed') {
         speed = msg.speed;
         updateUI();
         respond({ ok: true });
       }
-      else if (msg.type === 'showUI') { 
+      else if (msg.type === 'showUI') {
+        createUI();
         if (ui) ui.classList.remove('hidden');
-        respond({ ok: true }); 
+        respond({ ok: true });
       }
       return true;
     });
@@ -599,30 +460,24 @@
 
   // --- INITIALIZATION ---
 
-  // Create the UI after a short delay, and handle auto-continue
-  setTimeout(() => {
+  // Handle auto-continue from previous chapter navigation
+  if (sessionStorage.getItem('mscroller_continue') === '1') {
+    sessionStorage.removeItem('mscroller_continue');
     createUI();
-    // Auto-continue if coming from previous chapter
-    if (sessionStorage.getItem('mscroller_continue') === '1') {
-      sessionStorage.removeItem('mscroller_continue');
-      let countdown = 2;
-      showToast('Continuing in ' + countdown + '...');
-      const continueInterval = setInterval(() => {
-        countdown--;
-        if (countdown > 0) {
-          showToast('Continuing in ' + countdown + '...');
-        } else {
-          clearInterval(continueInterval);
-          start();
-        }
-      }, 1000);
-    }
-  }, 500);
+    let countdown = 2;
+    showToast('Continuing in ' + countdown + '...');
+    const continueInterval = setInterval(() => {
+      countdown--;
+      if (countdown > 0) {
+        showToast('Continuing in ' + countdown + '...');
+      } else {
+        clearInterval(continueInterval);
+        start();
+      }
+    }, 1000);
+  }
 
-  // Save the current chapter to history when the page loads
-  setTimeout(saveHistory, 1000);
-
-  // When leaving the page, save the session time to local storage
+  // Save session time on page unload
   window.addEventListener('beforeunload', () => {
     if (!isExtensionValid()) return;
     try {
@@ -632,9 +487,13 @@
           chrome.storage.local.set({ totalTime: data.totalTime + sessionSecs });
         }
       });
-    } catch (e) {
-      // Extension context invalidated, ignore
-    }
+    } catch (e) {}
   });
+
+  // Expose function to show UI (for re-activation)
+  window._mscrollerShowUI = function() {
+    createUI();
+    if (ui) ui.classList.remove('hidden');
+  };
 
 })();
