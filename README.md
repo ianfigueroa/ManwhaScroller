@@ -1,17 +1,17 @@
 # MScroller
 
-MScroller is a Chrome extension for auto-scrolling manga, manhwa, and webtoons. It provides a smooth reading experience with customizable speed, automatic chapter navigation, and reading stats.
+MScroller is a Chrome extension for auto-scrolling manga, manhwa, and webtoons. It has adjustable speed, automatic chapter navigation, and reading stats.
 
 ## Features
 
-- **Buttery smooth 60fps scrolling** with customizable speed (1-20, exponential scaling)
+- **Auto-scroll** with adjustable speed (1-50)
 - **Auto-continue** to the next chapter with a countdown timer
 - **Chapter tracker**: counts total chapters read
 - **Session & total time tracking**
-- **Click-to-activate**: privacy-friendly, only runs when you click Start
+- **Click-to-activate**: only runs on a page after you click Start
 - **Keyboard shortcuts** for quick control (when active)
-- **Modern teal UI**: floating controls, draggable, and easy to use
-- **Works on most manga/manhwa/webtoon sites** (smart pattern detection, no hardcoded sites)
+- **Floating controls**: a small panel you can drag around the page
+- **No per-site code**: finds chapter links with generic patterns, so it works on many manga/manhwa/webtoon sites
 
 ## Installation
 
@@ -22,7 +22,7 @@ MScroller is a Chrome extension for auto-scrolling manga, manhwa, and webtoons. 
 
 ## Usage
 
-1. Visit your favorite manga, manhwa, or webtoon site
+1. Open a chapter on a manga, manhwa, or webtoon site
 2. Click the extension icon and press Start to activate
 3. Adjust scroll speed and settings in the popup
 4. The extension will auto-continue to the next chapter when you reach the end
@@ -42,7 +42,7 @@ These shortcuts only work after you click Start to activate the extension on a p
 
 ## Settings
 
-- **Speed**: Adjust scroll speed from 1 (slow) to 20 (fast)
+- **Speed**: Adjust scroll speed from 1 (slow) to 50 (fast)
 - **Auto-next**: Enable/disable automatic chapter navigation
 - **Delay**: Set countdown before next chapter loads
 
@@ -54,12 +54,12 @@ These shortcuts only work after you click Start to activate the extension on a p
 
 ## How It Works
 
-MScroller uses smart pattern detection to work on most manga, manhwa, and webtoon sites. It automatically finds next and previous chapter links, scrolls the page for you, and provides a seamless reading experience. No site-specific code required—just install and start reading!
+Scrolling runs on `requestAnimationFrame`, so the speed stays the same regardless of frame rate. To find the next chapter it tries common selectors (`rel="next"`, classes with "next" in them), then links with text like "Next chapter", then a link whose URL has the current chapter number plus one. There is no per-site code, so sites with unusual markup may not be detected.
 
 ## Privacy
 
-All data is stored locally on your device. Nothing is sent to any server. The extension only activates when you explicitly click Start—it never runs automatically in the background.
+All data is stored locally on your device. Nothing is sent to any server. The content script is only added to a tab after you use the popup on it.
 
 ## Version
 
-v3.1.0
+v3.2.0

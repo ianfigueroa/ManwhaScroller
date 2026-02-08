@@ -1,13 +1,9 @@
-/*
- * MScroller - Content Script
- * Auto-scrolling extension for manga/manhwa reading.
- * Only runs when activated via popup - no intrusive behavior.
- */
+// Injected by background.js, only into tabs where the popup was used.
 (function() {
   if (window._mscroller) return;
   window._mscroller = true;
 
-  // --- Helper to safely access chrome.storage ---
+  // chrome.* throws after the extension is reloaded, so check before touching storage
   function isExtensionValid() {
     try {
       return typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local && chrome.storage.sync;
@@ -16,7 +12,6 @@
     }
   }
 
-  // --- State variables ---
   let scrolling = false;
   let speed = 5;
   let autoNext = true;
@@ -27,7 +22,6 @@
   let ui = null;
   let keyboardEnabled = false;
 
-  // Load user settings from Chrome storage
   if (isExtensionValid()) {
     chrome.storage.sync.get({ speed: 5, autoNext: true, nextDelay: 3 }, s => {
       speed = s.speed;
@@ -44,8 +38,6 @@
       }
     });
   }
-
-  // --- SCROLLING LOGIC ---
 
   function start() {
     if (scrolling) return;
@@ -86,8 +78,6 @@
 
     animationId = requestAnimationFrame(smoothScroll);
   }
-
-  // --- CHAPTER NAVIGATION ---
 
   function getChapter() {
     const url = window.location.href;
@@ -218,8 +208,6 @@
     } catch (e) {}
   }
 
-  // --- FLOATING UI ---
-
   function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -304,7 +292,6 @@
     document.head.appendChild(style);
     document.body.appendChild(ui);
 
-    // Event handlers
     ui.querySelector('.ms-close').onclick = () => {
       ui.classList.add('hidden');
       disableKeyboardShortcuts();
@@ -324,7 +311,6 @@
       };
     });
 
-    // Drag functionality
     let dragging = false, startX, startY, startLeft, startTop;
     ui.querySelector('.ms-header').onmousedown = e => {
       dragging = true;
@@ -343,7 +329,6 @@
     };
     document.onmouseup = () => dragging = false;
 
-    // Timer update
     setInterval(() => {
       const secs = Math.floor((Date.now() - sessionStart) / 1000);
       const m = Math.floor(secs / 60);
@@ -352,7 +337,6 @@
       if (timeEl) timeEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
     }, 1000);
 
-    // Enable keyboard shortcuts when UI is created
     enableKeyboardShortcuts();
   }
 
@@ -373,8 +357,6 @@
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
   }
-
-  // --- KEYBOARD SHORTCUTS ---
 
   function handleKeydown(e) {
     const activeTag = document.activeElement ? document.activeElement.tagName : '';
@@ -420,8 +402,6 @@
     document.removeEventListener('keydown', handleKeydown, true);
   }
 
-  // --- EXTENSION MESSAGES ---
-
   if (isExtensionValid()) {
     chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       if (msg.type === 'toggle') {
@@ -451,8 +431,6 @@
     });
   }
 
-  // --- INITIALIZATION ---
-
   // Handle auto-continue from previous chapter navigation
   if (sessionStorage.getItem('mscroller_continue') === '1') {
     sessionStorage.removeItem('mscroller_continue');
@@ -470,7 +448,6 @@
     }, 1000);
   }
 
-  // Save session time on page unload
   window.addEventListener('beforeunload', () => {
     if (!isExtensionValid()) return;
     try {

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MScroller",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "Simple auto-scroller for manga and manhwa websites",
   "permissions": ["activeTab", "storage", "scripting"],
   "action": {

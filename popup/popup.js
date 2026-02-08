@@ -1,4 +1,3 @@
-// Get references to all the popup UI elements
 const startBtn = document.getElementById('toggle');
 const speedSlider = document.getElementById('speed');
 const speedValue = document.getElementById('speed-val');
@@ -11,12 +10,10 @@ const totalTime = document.getElementById('total');
 
 let updateInterval;
 
-// Ensure content script is injected before sending messages
 async function ensureContentScript() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return null;
 
-  // Ask background to inject if needed
   await chrome.runtime.sendMessage({ type: 'ensureContentScript', tabId: tab.id });
 
   // Small delay to let script initialize
@@ -25,7 +22,6 @@ async function ensureContentScript() {
   return tab;
 }
 
-// Load user settings from Chrome storage and update UI
 async function loadSettings() {
   const data = await chrome.storage.sync.get(['speed', 'autoNext', 'nextDelay']);
 
@@ -38,7 +34,6 @@ async function loadSettings() {
   delayValue.textContent = delaySlider.value + 's';
 }
 
-// Save settings when user changes them
 speedSlider.addEventListener('input', () => {
   speedValue.textContent = speedSlider.value;
   chrome.storage.sync.set({ speed: parseInt(speedSlider.value) });
@@ -54,7 +49,6 @@ delaySlider.addEventListener('input', () => {
   chrome.storage.sync.set({ nextDelay: parseInt(delaySlider.value) });
 });
 
-// Handle start/stop button click
 startBtn.addEventListener('click', async () => {
   const tab = await ensureContentScript();
   if (!tab) return;
@@ -72,7 +66,6 @@ startBtn.addEventListener('click', async () => {
   }
 });
 
-// Update the stats section in the popup
 async function updateStats() {
   const data = await chrome.storage.local.get(['totalTime', 'currentSession', 'chaptersRead']);
 
@@ -84,7 +77,6 @@ async function updateStats() {
   }
 }
 
-// Get info about the current tab
 async function getCurrentInfo() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) {
@@ -103,7 +95,6 @@ async function getCurrentInfo() {
   }
 }
 
-// Send a message to the content script
 async function sendToContent(message) {
   const tab = await ensureContentScript();
   if (!tab) return;
@@ -119,7 +110,6 @@ async function sendToContent(message) {
   }
 }
 
-// Helper function for formatting time
 function formatTime(seconds) {
   if (!seconds || seconds < 0) return '0:00';
   const h = Math.floor(seconds / 3600);
@@ -131,18 +121,15 @@ function formatTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// Initialize popup
 loadSettings();
 updateStats();
 getCurrentInfo();
 
-// Periodically update stats and current info
 updateInterval = setInterval(() => {
   getCurrentInfo();
   updateStats();
 }, 1000);
 
-// Clean up interval when popup is closed
 window.addEventListener('unload', () => {
   clearInterval(updateInterval);
 });
